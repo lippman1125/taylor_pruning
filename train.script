@@ -1,0 +1,4 @@
+python3 finetune.py --train \
+                    --train_path /home/lqy/data/dogs_vs_cats/train_mini \
+                    --test_path /home/lqy/data/dogs_vs_cats/test_mini  \
+                    --use-cuda

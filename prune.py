@@ -15,6 +15,7 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
     next_conv = None
     offset = 1
 
+    # find next conv, because we prune filter and prune channel of next filter simutaneously
     while layer_index + offset <  len(model.features._modules.items()):
         res =  list(model.features._modules.items())[layer_index+offset]
         if isinstance(res[1], torch.nn.modules.conv.Conv2d):
@@ -32,6 +33,7 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
             groups = conv.groups,
             bias = (conv.bias is not None))
 
+    # copy weights
     old_weights = conv.weight.data.cpu().numpy()
     new_weights = new_conv.weight.data.cpu().numpy()
 
@@ -41,6 +43,7 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
     if use_cuda:
         new_conv.weight.data = new_conv.weight.data.cuda()
 
+    # copy bias
     bias_numpy = conv.bias.data.cpu().numpy()
 
     bias = np.zeros(shape = (bias_numpy.shape[0] - 1), dtype = np.float32)
@@ -50,7 +53,7 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
     if use_cuda:
         new_conv.bias.data = new_conv.bias.data.cuda()
 
-    if not next_conv is None:
+    if next_conv is not None:
         next_new_conv = \
             torch.nn.Conv2d(in_channels = next_conv.in_channels - 1,\
                 out_channels =  next_conv.out_channels, \
@@ -72,7 +75,7 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
 
         next_new_conv.bias.data = next_conv.bias.data
 
-    if not next_conv is None:
+    if next_conv is not None:
         features = torch.nn.Sequential(
                 *(replace_layers(model.features, i, [layer_index, layer_index+offset], \
                     [new_conv, next_new_conv]) for i, _ in enumerate(model.features)))
@@ -96,8 +99,10 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
 
         if old_linear_layer is None:
             raise BaseException("No linear laye found in classifier")
+        # for example, conv.out_channels == 512, so params_per_input_channel = 7x7
         params_per_input_channel = old_linear_layer.in_features // conv.out_channels
 
+        # because we prune one filter once
         new_linear_layer = \
             torch.nn.Linear(old_linear_layer.in_features - params_per_input_channel, 
                 old_linear_layer.out_features)
@@ -128,9 +133,10 @@ def prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=False):
     return model
 
 if __name__ == '__main__':
+    import time
     model = models.vgg16(pretrained=True)
     model.train()
 
     t0 = time.time()
-    model = prune_conv_layer(model, 28, 10)
+    model = prune_vgg16_conv_layer(model, 28, 10)
     print("The prunning took", time.time() - t0)

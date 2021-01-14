@@ -56,6 +56,7 @@ class FilterPrunner:
 
         activation_index = 0
         for layer, (name, module) in enumerate(self.model.features._modules.items()):
+            # get activations
             x = module(x)
             if isinstance(module, torch.nn.modules.conv.Conv2d):
                 x.register_hook(self.compute_rank)
@@ -72,6 +73,8 @@ class FilterPrunner:
         taylor = activation * grad
         # Get the average value for every filter, 
         # accross all the other dimensions
+        # featuremap dims = n x output_num x h x w
+        # output_num == filter num
         taylor = taylor.mean(dim=(0, 2, 3)).data
 
 
@@ -91,16 +94,22 @@ class FilterPrunner:
             for j in range(self.filter_ranks[i].size(0)):
                 data.append((self.activation_to_layer[i], j, self.filter_ranks[i][j]))
 
+        # 1. use heap-sort to find num smallest filter
+        # 2. itemgetter(2) indicates sort by third item
+        # 3. this method is called after normalization
         return nsmallest(num, data, itemgetter(2))
 
     def normalize_ranks_per_layer(self):
         for i in self.filter_ranks:
+            # use abs, because we only consider magtitude
             v = torch.abs(self.filter_ranks[i])
-            v = v / np.sqrt(torch.sum(v * v))
+            # normalize
+            v = v / torch.sqrt(torch.sum(v * v))
             self.filter_ranks[i] = v.cpu()
 
     def get_prunning_plan(self, num_filters_to_prune):
         filters_to_prune = self.lowest_ranking_filters(num_filters_to_prune)
+        # print("filters_to_prune: {}".format(filters_to_prune))
 
         # After each of the k filters are prunned,
         # the filter index of the next filters change since the model is smaller.
@@ -133,7 +142,7 @@ class PrunningFineTuner_VGG16:
         self.model.train()
 
     def test(self):
-        return
+        # return
         self.model.eval()
         correct = 0
         total = 0
@@ -170,11 +179,14 @@ class PrunningFineTuner_VGG16:
         self.model.zero_grad()
         input = Variable(batch)
 
+        # sort filters
         if rank_filters:
             output = self.prunner.forward(input)
             self.criterion(output, Variable(label)).backward()
         else:
-            self.criterion(self.model(input), Variable(label)).backward()
+        # normal training
+            output = self.model(input)
+            self.criterion(output, Variable(label)).backward()
             optimizer.step()
 
     def train_epoch(self, optimizer = None, rank_filters = False):
@@ -183,6 +195,7 @@ class PrunningFineTuner_VGG16:
 
     def get_candidates_to_prune(self, num_filters_to_prune):
         self.prunner.reset()
+        # just for gradient collection, finetune is performed at other place
         self.train_epoch(rank_filters = True)
         self.prunner.normalize_ranks_per_layer()
         return self.prunner.get_prunning_plan(num_filters_to_prune)
@@ -214,16 +227,18 @@ class PrunningFineTuner_VGG16:
         for _ in range(iterations):
             print("Ranking filters.. ")
             prune_targets = self.get_candidates_to_prune(num_filters_to_prune_per_iteration)
-            layers_prunned = {}
-            for layer_index, filter_index in prune_targets:
-                if layer_index not in layers_prunned:
-                    layers_prunned[layer_index] = 0
-                layers_prunned[layer_index] = layers_prunned[layer_index] + 1 
+            # layers_prunned = {}
+            # for layer_index, filter_index in prune_targets:
+            #     print(layer_index, filter_index)
+            #     if layer_index not in layers_prunned:
+            #         layers_prunned[layer_index] = 0
+            #     layers_prunned[layer_index] = layers_prunned[layer_index] + 1
 
-            print("Layers that will be prunned", layers_prunned)
+            print("Layers that will be prunned", prune_targets)
             print("Prunning filters.. ")
             model = self.model.cpu()
             for layer_index, filter_index in prune_targets:
+                # print("Prunning filter: layer ind {} filter ind {}".format(layer_index, filter_index))
                 model = prune_vgg16_conv_layer(model, layer_index, filter_index, use_cuda=args.use_cuda)
 
             self.model = model
