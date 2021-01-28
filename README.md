@@ -37,6 +37,13 @@ Training:
 2. Pruning during finetune.  
 Pruning:  
 `python finetune.py --prune`
+3. Pruning step  
+  step1. setup finetune dataset, sub from traindata  
+  step2. set num_filters_to_prune_per_iteration, we can prune multi-filters one iteration (one epoch)  
+  step3. collecting the importance of the channel (average grad*activation), one channel is the outputs of one prev layer's filter  
+  step4. normalize the importance  
+  step5. remove least important filter  
+  step6. repeat 3-5   
 
 TBD
 ---
