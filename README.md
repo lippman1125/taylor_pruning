@@ -30,12 +30,12 @@ Test
 ......... cats
 
 
-The images were taken from [here](https://www.kaggle.com/c/dogs-vs-cats) but you should try training this on your own data and see if it works!
-
-Training:
-`python finetune.py --train`
-
-Pruning:
+The images were taken from [here](https://www.kaggle.com/c/dogs-vs-cats) but you should try training this on your own data and see if it works!  
+1. We need a baseline model, if we already have one, we do not need training.  
+Training:  
+`python finetune.py --train`  
+2. Pruning during finetune.  
+Pruning:  
 `python finetune.py --prune`
 
 TBD
